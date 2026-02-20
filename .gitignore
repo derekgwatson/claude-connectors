@@ -1,0 +1,10 @@
+# OAuth credentials and tokens
+credentials.json
+token.json
+
+# Environment files
+.env
+
+# Python
+__pycache__/
+*.pyc
