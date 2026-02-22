@@ -1,0 +1,15 @@
+[Unit]
+Description=Briefing State API
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/briefing-api
+EnvironmentFile=/opt/briefing-api/.env
+ExecStart=/usr/bin/python3 -m uvicorn app:app --host 127.0.0.1 --port 8100
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

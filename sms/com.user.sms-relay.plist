@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SMS/iMessage Relay — launchd service definition
+
+  Installation:
+    1. Copy this file to ~/Library/LaunchAgents/
+    2. Edit the two PATH_TO_RELAY placeholders below
+    3. Load:   launchctl load   ~/Library/LaunchAgents/com.user.sms-relay.plist
+    4. Unload: launchctl unload ~/Library/LaunchAgents/com.user.sms-relay.plist
+
+  Logs:  ~/.sms-relay/relay.log  (application log)
+         ~/.sms-relay/stderr.log (crash/startup errors)
+-->
+<plist version="1.0">
+<dict>
+
+    <key>Label</key>
+    <string>com.user.sms-relay</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/derek/relay.py</string>
+        <string>--once</string>
+    </array>
+
+    <!-- Run every 60 seconds -->
+    <key>StartInterval</key>
+    <integer>60</integer>
+
+    <!-- Also run immediately when loaded -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/sms-relay-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/sms-relay-stderr.log</string>
+
+    <!-- Restart on failure after 10 seconds -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+</dict>
+</plist>
