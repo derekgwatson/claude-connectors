@@ -270,3 +270,51 @@ def delete_pref(key: str, db=Depends(get_db)):
     cur.execute("DELETE FROM briefing_prefs WHERE pref_key = %s", (key,))
     db.commit()
     return {"status": "ok", "key": key, "deleted": cur.rowcount > 0}
+
+
+# -------------------------------------------------------------------------
+# Follow-ups
+# -------------------------------------------------------------------------
+
+
+class FollowupCreate(BaseModel):
+    person: str
+    summary: str
+    source_link: str = ""
+
+
+@app.get("/api/briefing/followups")
+def get_followups(db=Depends(get_db)):
+    cur = db.cursor(dictionary=True)
+    cur.execute(
+        "SELECT id, person, summary, source_link, created_at "
+        "FROM followups WHERE resolved_at IS NULL ORDER BY created_at"
+    )
+    rows = cur.fetchall()
+    for r in rows:
+        r["created_at"] = r["created_at"].isoformat()
+    return {"followups": rows}
+
+
+@app.post("/api/briefing/followups")
+def add_followup(body: FollowupCreate, db=Depends(get_db)):
+    cur = db.cursor()
+    cur.execute(
+        "INSERT INTO followups (person, summary, source_link) VALUES (%s, %s, %s)",
+        (body.person, body.summary, body.source_link or None),
+    )
+    db.commit()
+    return {"status": "ok", "id": cur.lastrowid}
+
+
+@app.post("/api/briefing/followups/{followup_id}/resolve")
+def resolve_followup(followup_id: int, db=Depends(get_db)):
+    cur = db.cursor()
+    cur.execute(
+        "UPDATE followups SET resolved_at = NOW() WHERE id = %s AND resolved_at IS NULL",
+        (followup_id,),
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(404, "Follow-up not found or already resolved")
+    return {"status": "ok", "id": followup_id, "resolved": True}

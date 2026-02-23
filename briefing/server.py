@@ -216,5 +216,57 @@ def reset_channel(channel: str) -> str:
     return f"Channel '{result['channel']}' has been reset. Next briefing will include all items."
 
 
+# -----------------------------------------------------------------------
+# Follow-ups
+# -----------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_followups() -> str:
+    """Get open follow-ups — people waiting on a reply from you.
+
+    Returns a list of outstanding follow-ups. Check this at the start
+    of every briefing and surface any items that need attention.
+    """
+    data = _get("/followups")
+    items = data.get("followups", [])
+    if not items:
+        return "No open follow-ups."
+    lines = ["People waiting on you", "=" * 40]
+    for f in items:
+        link = f"  Link: {f['source_link']}" if f.get("source_link") else ""
+        lines.append(f"  [{f['id']}] {f['person']} — {f['summary']}  (added {f['created_at']})")
+        if link:
+            lines.append(link)
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def add_followup(person: str, summary: str, source_link: str = "") -> str:
+    """Add a follow-up — someone is waiting on you to get back to them.
+
+    Args:
+        person: Who is waiting (e.g. "Ben Smith")
+        summary: What they're waiting for (e.g. "wants to know how the scanner setup went")
+        source_link: Optional link to the email or ticket for quick access
+    """
+    data = {"person": person, "summary": summary}
+    if source_link:
+        data["source_link"] = source_link
+    result = _post("/followups", data)
+    return f"Follow-up #{result['id']} added: {person} — {summary}"
+
+
+@mcp.tool()
+def resolve_followup(followup_id: int) -> str:
+    """Mark a follow-up as done — you've gotten back to the person.
+
+    Args:
+        followup_id: The ID of the follow-up to resolve (from get_followups)
+    """
+    result = _post(f"/followups/{followup_id}/resolve", {})
+    return f"Follow-up #{result['id']} resolved."
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

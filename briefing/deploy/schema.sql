@@ -30,5 +30,15 @@ CREATE TABLE gchat_seen (
     briefed_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Follow-ups: people waiting on a reply from you
+CREATE TABLE followups (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    person      VARCHAR(128) NOT NULL,
+    summary     VARCHAR(512) NOT NULL,
+    source_link VARCHAR(512) DEFAULT NULL,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME     DEFAULT NULL
+);
+
 -- Seed channel rows
 INSERT INTO channel_state (channel) VALUES ('gmail'), ('zendesk'), ('gchat'), ('sms');
