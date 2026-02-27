@@ -8,6 +8,25 @@
 
 **Completed:** All email cleanup prefs migrated to cloud DB via `set_briefing_pref`. Now available from any machine.
 
+## Setup: /briefing Slash Command (updated 2026-02-27)
+
+The `/briefing` command lives at `.claude/commands/briefing.md` in this repo. It auto-detects whether it's the first run of the day or a mid-day check-in based on local time (AEDT).
+
+### Per-machine setup:
+1. Clone this repo and ensure `.mcp.json` servers are working (gmail, zendesk, gchat, briefing)
+2. Ensure `.env` files exist for each connector (API keys, OAuth tokens)
+3. Run `/briefing` from within the project directory
+
+### Modes (auto-detected):
+- **Morning (first run of the day):** Full briefing with channel sweep, newsletter/notification cleanup, follow-up review, request linking
+- **Mid-day (subsequent runs):** Quick incremental check — just what's new since last run, skip bulk cleanup
+
+### Request cleanup:
+When a request status changes (closed, pending, etc.), automatically:
+- Archive linked Gmail emails
+- Warn if linked Zendesk ticket status doesn't match (ask before changing)
+- GChat/SMS — no archive action needed
+
 ## TODO: GChat Connector - Add send_message capability (2026-02-23)
 
 **Priority:** Normal

@@ -40,5 +40,35 @@ CREATE TABLE followups (
     resolved_at DATETIME     DEFAULT NULL
 );
 
+-- Cross-channel requests: group related items from different channels
+CREATE TABLE requests (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(256) NOT NULL,
+    description TEXT,
+    status      VARCHAR(32)  NOT NULL DEFAULT 'open',  -- open, pending, closed
+    priority    VARCHAR(16)  NOT NULL DEFAULT 'normal',  -- low, normal, high
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    closed_at   DATETIME     DEFAULT NULL
+);
+
+-- Items linked to a request (emails, tickets, chat messages, etc.)
+CREATE TABLE request_items (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    request_id  INT          NOT NULL,
+    channel     VARCHAR(32)  NOT NULL,
+    item_id     VARCHAR(128) NOT NULL,
+    label       VARCHAR(256) DEFAULT NULL,
+    added_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_request_channel_item (request_id, channel, item_id)
+);
+
+-- Cloud-synced memory (single row)
+CREATE TABLE memory (
+    id          INT PRIMARY KEY DEFAULT 1,
+    content     MEDIUMTEXT   NOT NULL,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- Seed channel rows
 INSERT INTO channel_state (channel) VALUES ('gmail'), ('zendesk'), ('gchat'), ('sms');

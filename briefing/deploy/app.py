@@ -277,6 +277,182 @@ def delete_pref(key: str, db=Depends(get_db)):
 # -------------------------------------------------------------------------
 
 
+# -------------------------------------------------------------------------
+# Requests — cross-channel grouping
+# -------------------------------------------------------------------------
+
+
+VALID_PRIORITIES = {"low", "normal", "high"}
+
+
+class RequestCreate(BaseModel):
+    name: str
+    description: str = ""
+    priority: str = "normal"
+
+
+class RequestUpdate(BaseModel):
+    name: str = ""
+    description: str = ""
+    status: str = ""
+    priority: str = ""
+
+
+class RequestItemAdd(BaseModel):
+    channel: str
+    item_id: str
+    label: str = ""
+
+
+@app.get("/api/briefing/requests")
+def list_requests(status: str = "open", db=Depends(get_db)):
+    cur = db.cursor(dictionary=True)
+    if status == "all":
+        cur.execute(
+            "SELECT id, name, description, status, priority, created_at, closed_at "
+            "FROM requests ORDER BY FIELD(priority, 'high', 'normal', 'low'), created_at DESC"
+        )
+    else:
+        cur.execute(
+            "SELECT id, name, description, status, priority, created_at, closed_at "
+            "FROM requests WHERE status = %s ORDER BY FIELD(priority, 'high', 'normal', 'low'), created_at DESC",
+            (status,),
+        )
+    rows = cur.fetchall()
+    for r in rows:
+        r["created_at"] = r["created_at"].isoformat() if r["created_at"] else None
+        r["closed_at"] = r["closed_at"].isoformat() if r["closed_at"] else None
+    return {"requests": rows}
+
+
+@app.post("/api/briefing/requests")
+def create_request(body: RequestCreate, db=Depends(get_db)):
+    cur = db.cursor()
+    if body.priority and body.priority not in VALID_PRIORITIES:
+        raise HTTPException(400, f"Priority must be one of: {', '.join(VALID_PRIORITIES)}")
+    cur.execute(
+        "INSERT INTO requests (name, description, priority) VALUES (%s, %s, %s)",
+        (body.name, body.description or None, body.priority or "normal"),
+    )
+    db.commit()
+    return {"status": "ok", "id": cur.lastrowid, "name": body.name}
+
+
+@app.get("/api/briefing/requests/search")
+def search_requests(q: str, db=Depends(get_db)):
+    cur = db.cursor(dictionary=True)
+    cur.execute(
+        "SELECT id, name, description, status, priority, created_at, closed_at "
+        "FROM requests WHERE name LIKE %s ORDER BY created_at DESC",
+        (f"%{q}%",),
+    )
+    rows = cur.fetchall()
+    for r in rows:
+        r["created_at"] = r["created_at"].isoformat() if r["created_at"] else None
+        r["closed_at"] = r["closed_at"].isoformat() if r["closed_at"] else None
+    return {"requests": rows}
+
+
+@app.get("/api/briefing/requests/{request_id}")
+def get_request(request_id: int, db=Depends(get_db)):
+    cur = db.cursor(dictionary=True)
+    cur.execute(
+        "SELECT id, name, description, status, priority, created_at, closed_at "
+        "FROM requests WHERE id = %s",
+        (request_id,),
+    )
+    req = cur.fetchone()
+    if not req:
+        raise HTTPException(404, "Request not found")
+    req["created_at"] = req["created_at"].isoformat() if req["created_at"] else None
+    req["closed_at"] = req["closed_at"].isoformat() if req["closed_at"] else None
+
+    cur.execute(
+        "SELECT id, channel, item_id, label, added_at "
+        "FROM request_items WHERE request_id = %s ORDER BY channel, added_at",
+        (request_id,),
+    )
+    items = cur.fetchall()
+    for item in items:
+        item["added_at"] = item["added_at"].isoformat() if item["added_at"] else None
+    req["items"] = items
+    return req
+
+
+@app.patch("/api/briefing/requests/{request_id}")
+def update_request(request_id: int, body: RequestUpdate, db=Depends(get_db)):
+    cur = db.cursor()
+    updates = []
+    params = []
+    if body.name:
+        updates.append("name = %s")
+        params.append(body.name)
+    if body.description:
+        updates.append("description = %s")
+        params.append(body.description)
+    if body.priority:
+        if body.priority not in VALID_PRIORITIES:
+            raise HTTPException(400, f"Priority must be one of: {', '.join(VALID_PRIORITIES)}")
+        updates.append("priority = %s")
+        params.append(body.priority)
+    if body.status:
+        if body.status not in ("open", "closed", "pending"):
+            raise HTTPException(400, "Status must be 'open', 'closed', or 'pending'")
+        updates.append("status = %s")
+        params.append(body.status)
+        if body.status == "closed":
+            updates.append("closed_at = NOW()")
+        elif body.status in ("open", "pending"):
+            updates.append("closed_at = NULL")
+    if not updates:
+        raise HTTPException(400, "No fields to update")
+    params.append(request_id)
+    cur.execute(
+        f"UPDATE requests SET {', '.join(updates)} WHERE id = %s", params
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(404, "Request not found")
+    return {"status": "ok", "id": request_id}
+
+
+@app.post("/api/briefing/requests/{request_id}/items")
+def add_request_item(request_id: int, body: RequestItemAdd, db=Depends(get_db)):
+    cur = db.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO request_items (request_id, channel, item_id, label) "
+            "VALUES (%s, %s, %s, %s)",
+            (request_id, body.channel, body.item_id, body.label or None),
+        )
+        db.commit()
+    except Exception as e:
+        if "Duplicate entry" in str(e):
+            raise HTTPException(409, "Item already linked to this request")
+        if "foreign key" in str(e).lower() or "Cannot add" in str(e):
+            raise HTTPException(404, "Request not found")
+        raise
+    return {"status": "ok", "id": cur.lastrowid}
+
+
+@app.delete("/api/briefing/requests/{request_id}/items/{item_id}")
+def remove_request_item(request_id: int, item_id: str, db=Depends(get_db)):
+    cur = db.cursor()
+    cur.execute(
+        "DELETE FROM request_items WHERE request_id = %s AND item_id = %s",
+        (request_id, item_id),
+    )
+    db.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(404, "Item not found in this request")
+    return {"status": "ok", "deleted": True}
+
+
+# -------------------------------------------------------------------------
+# Follow-ups
+# -------------------------------------------------------------------------
+
+
 class FollowupCreate(BaseModel):
     person: str
     summary: str
@@ -318,3 +494,35 @@ def resolve_followup(followup_id: int, db=Depends(get_db)):
     if cur.rowcount == 0:
         raise HTTPException(404, "Follow-up not found or already resolved")
     return {"status": "ok", "id": followup_id, "resolved": True}
+
+
+# -------------------------------------------------------------------------
+# Memory — cloud-synced memory store
+# -------------------------------------------------------------------------
+
+
+class MemoryUpdate(BaseModel):
+    content: str
+
+
+@app.get("/api/briefing/memory")
+def get_memory(db=Depends(get_db)):
+    cur = db.cursor(dictionary=True)
+    cur.execute("SELECT content, updated_at FROM memory WHERE id = 1")
+    row = cur.fetchone()
+    if not row:
+        return {"content": "", "updated_at": None}
+    row["updated_at"] = row["updated_at"].isoformat() if row["updated_at"] else None
+    return row
+
+
+@app.put("/api/briefing/memory")
+def put_memory(body: MemoryUpdate, db=Depends(get_db)):
+    cur = db.cursor()
+    cur.execute(
+        "INSERT INTO memory (id, content) VALUES (1, %s) "
+        "ON DUPLICATE KEY UPDATE content = %s, updated_at = NOW()",
+        (body.content, body.content),
+    )
+    db.commit()
+    return {"status": "ok"}
