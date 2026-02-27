@@ -3,13 +3,18 @@
 Connects to Gmail via OAuth2 and exposes tools for reading and managing emails.
 """
 
-import os
-import json
 import base64
+import json
+import logging
+import os
 import re
+import sys
 from datetime import datetime
-from pathlib import Path
 from email.utils import parsedate_to_datetime
+from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s", stream=sys.stderr)
+logger = logging.getLogger("mcp.gmail")
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials

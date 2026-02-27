@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "gmail": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["C:\\Users\\Derek\\claude-connectors\\gmail\\server.py"],
+      "env": {"PYTHONUNBUFFERED": "1"}
+    },
+    "gchat": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["C:\\Users\\Derek\\claude-connectors\\gchat\\server.py"],
+      "env": {"PYTHONUNBUFFERED": "1"}
+    },
+    "zendesk": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["C:\\Users\\Derek\\claude-connectors\\zendesk\\server.py"],
+      "env": {"PYTHONUNBUFFERED": "1"}
+    },
+    "briefing-state": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["C:\\Users\\Derek\\claude-connectors\\briefing\\server.py"],
+      "env": {"PYTHONUNBUFFERED": "1"}
+    }
+  }
+}

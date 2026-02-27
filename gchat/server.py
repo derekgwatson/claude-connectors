@@ -14,6 +14,12 @@ Setup:
   5. Run this server — it will open a browser for OAuth consent on first run
 """
 
+import logging
+import sys
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s", stream=sys.stderr)
+logger = logging.getLogger("mcp.gchat")
+
 import os
 from datetime import datetime, timezone
 from pathlib import Path

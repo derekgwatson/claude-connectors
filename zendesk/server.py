@@ -3,13 +3,18 @@
 Connects to Zendesk via API token and exposes tools for managing support tickets.
 """
 
+import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s", stream=sys.stderr)
+logger = logging.getLogger("mcp.zendesk")
 
 # --- Config ---
 PROJECT_DIR = Path(__file__).parent
@@ -23,25 +28,50 @@ BASE_URL = f"https://{SUBDOMAIN}.zendesk.com/api/v2"
 AUTH = (f"{EMAIL}/token", API_TOKEN)
 
 
+class APIError(Exception):
+    """Raised when a Zendesk API call fails, with a user-friendly message."""
+
+
 def zen_get(endpoint: str, params: dict | None = None) -> dict:
     """Make an authenticated GET request to the Zendesk API."""
-    r = requests.get(f"{BASE_URL}/{endpoint}", auth=AUTH, params=params)
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = requests.get(f"{BASE_URL}/{endpoint}", auth=AUTH, params=params, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.Timeout:
+        raise APIError(f"Zendesk API timed out: GET {endpoint}")
+    except requests.exceptions.ConnectionError:
+        raise APIError(f"Could not connect to Zendesk API: GET {endpoint}")
+    except requests.exceptions.HTTPError as e:
+        raise APIError(f"Zendesk API error {e.response.status_code}: GET {endpoint} — {e.response.text[:200]}")
 
 
 def zen_put(endpoint: str, data: dict) -> dict:
     """Make an authenticated PUT request to the Zendesk API."""
-    r = requests.put(f"{BASE_URL}/{endpoint}", auth=AUTH, json=data)
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = requests.put(f"{BASE_URL}/{endpoint}", auth=AUTH, json=data, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.Timeout:
+        raise APIError(f"Zendesk API timed out: PUT {endpoint}")
+    except requests.exceptions.ConnectionError:
+        raise APIError(f"Could not connect to Zendesk API: PUT {endpoint}")
+    except requests.exceptions.HTTPError as e:
+        raise APIError(f"Zendesk API error {e.response.status_code}: PUT {endpoint} — {e.response.text[:200]}")
 
 
 def zen_post(endpoint: str, data: dict) -> dict:
     """Make an authenticated POST request to the Zendesk API."""
-    r = requests.post(f"{BASE_URL}/{endpoint}", auth=AUTH, json=data)
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = requests.post(f"{BASE_URL}/{endpoint}", auth=AUTH, json=data, timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.Timeout:
+        raise APIError(f"Zendesk API timed out: POST {endpoint}")
+    except requests.exceptions.ConnectionError:
+        raise APIError(f"Could not connect to Zendesk API: POST {endpoint}")
+    except requests.exceptions.HTTPError as e:
+        raise APIError(f"Zendesk API error {e.response.status_code}: POST {endpoint} — {e.response.text[:200]}")
 
 
 def format_dt(dt_str: str | None) -> str:

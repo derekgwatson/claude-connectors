@@ -4,12 +4,17 @@ Connects to the remote briefing state API to track what's been
 briefed across sessions. Enables incremental morning briefings.
 """
 
+import logging
 import os
+import sys
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s", stream=sys.stderr)
+logger = logging.getLogger("mcp.briefing")
 
 # --- Config ---
 PROJECT_DIR = Path(__file__).parent
@@ -22,22 +27,47 @@ HEADERS = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
 mcp = FastMCP("briefing-state")
 
 
+class APIError(Exception):
+    """Raised when an API call fails, with a user-friendly message."""
+
+
 def _get(path: str) -> dict:
-    r = requests.get(f"{API_BASE}{path}", headers=HEADERS, timeout=15)
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = requests.get(f"{API_BASE}{path}", headers=HEADERS, timeout=15)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.Timeout:
+        raise APIError(f"API request timed out: GET {path}")
+    except requests.exceptions.ConnectionError:
+        raise APIError(f"Could not connect to briefing API: GET {path}")
+    except requests.exceptions.HTTPError as e:
+        raise APIError(f"API error {e.response.status_code}: GET {path} — {e.response.text[:200]}")
 
 
 def _post(path: str, data: dict) -> dict:
-    r = requests.post(f"{API_BASE}{path}", headers=HEADERS, json=data, timeout=15)
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = requests.post(f"{API_BASE}{path}", headers=HEADERS, json=data, timeout=15)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.Timeout:
+        raise APIError(f"API request timed out: POST {path}")
+    except requests.exceptions.ConnectionError:
+        raise APIError(f"Could not connect to briefing API: POST {path}")
+    except requests.exceptions.HTTPError as e:
+        raise APIError(f"API error {e.response.status_code}: POST {path} — {e.response.text[:200]}")
 
 
 def _delete(path: str) -> dict:
-    r = requests.delete(f"{API_BASE}{path}", headers=HEADERS, timeout=15)
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = requests.delete(f"{API_BASE}{path}", headers=HEADERS, timeout=15)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.Timeout:
+        raise APIError(f"API request timed out: DELETE {path}")
+    except requests.exceptions.ConnectionError:
+        raise APIError(f"Could not connect to briefing API: DELETE {path}")
+    except requests.exceptions.HTTPError as e:
+        raise APIError(f"API error {e.response.status_code}: DELETE {path} — {e.response.text[:200]}")
 
 
 # -----------------------------------------------------------------------
