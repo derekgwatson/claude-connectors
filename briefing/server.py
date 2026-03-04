@@ -57,6 +57,19 @@ def _post(path: str, data: dict) -> dict:
         raise APIError(f"API error {e.response.status_code}: POST {path} — {e.response.text[:200]}")
 
 
+def _patch(path: str, data: dict) -> dict:
+    try:
+        r = requests.patch(f"{API_BASE}{path}", headers=HEADERS, json=data, timeout=15)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.Timeout:
+        raise APIError(f"API request timed out: PATCH {path}")
+    except requests.exceptions.ConnectionError:
+        raise APIError(f"Could not connect to briefing API: PATCH {path}")
+    except requests.exceptions.HTTPError as e:
+        raise APIError(f"API error {e.response.status_code}: PATCH {path} — {e.response.text[:200]}")
+
+
 def _delete(path: str) -> dict:
     try:
         r = requests.delete(f"{API_BASE}{path}", headers=HEADERS, timeout=15)
@@ -296,6 +309,147 @@ def resolve_followup(followup_id: int) -> str:
     """
     result = _post(f"/followups/{followup_id}/resolve", {})
     return f"Follow-up #{result['id']} resolved."
+
+
+# -----------------------------------------------------------------------
+# Requests
+# -----------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_requests(status: str = "open") -> str:
+    """List tracked requests, sorted by priority.
+
+    Args:
+        status: Filter by status: "open", "pending", "closed", or "" for all.
+    """
+    params = f"?status={status}" if status else ""
+    data = _get(f"/requests{params}")
+    items = data.get("requests", [])
+    if not items:
+        return f"No {status or 'matching'} requests."
+    lines = [f"Requests ({status or 'all'})", "=" * 40]
+    for req in items:
+        item_count = req.get("item_count", 0)
+        pri = req.get("priority", "normal")
+        lines.append(f"  [{req['id']}] {req['name']}  ({req['status']}, {pri})")
+        if req.get("description"):
+            lines.append(f"       {req['description'][:80]}")
+        lines.append(f"       {item_count} linked item(s)")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def search_requests(query: str) -> str:
+    """Search requests by name.
+
+    Args:
+        query: Search text to match against request names.
+    """
+    data = _get(f"/requests/search?q={query}")
+    items = data.get("requests", [])
+    if not items:
+        return f"No requests matching '{query}'."
+    lines = [f"Search results for '{query}'", "=" * 40]
+    for req in items:
+        lines.append(f"  [{req['id']}] {req['name']}  ({req['status']}, {req.get('priority', 'normal')})")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def get_request(request_id: int) -> str:
+    """Get full details of a request including linked items.
+
+    Args:
+        request_id: The request ID.
+    """
+    data = _get(f"/requests/{request_id}")
+    lines = [
+        f"Request #{data['id']}: {data['name']}",
+        f"Status: {data['status']}  Priority: {data.get('priority', 'normal')}",
+        f"Created: {data.get('created_at', '?')}  Updated: {data.get('updated_at', '?')}",
+    ]
+    if data.get("description"):
+        lines.append(f"Description: {data['description']}")
+    items = data.get("items", [])
+    if items:
+        lines.append("")
+        lines.append(f"Linked items ({len(items)}):")
+        for item in items:
+            label = item.get("label", item["item_id"])
+            lines.append(f"  [{item['id']}] {item['channel']}: {label} ({item['item_id']})")
+    else:
+        lines.append("\nNo linked items.")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def create_request(name: str, description: str = "", priority: str = "normal") -> str:
+    """Create a new tracked request.
+
+    Args:
+        name: Short name for the request.
+        description: Longer description of what's needed.
+        priority: Priority level: low, normal, high, urgent. Default: normal.
+    """
+    data = {"name": name, "description": description, "priority": priority}
+    result = _post("/requests", data)
+    return f"Request #{result['id']} created: {result['name']} ({priority})"
+
+
+@mcp.tool()
+def update_request(request_id: int, name: str = "", description: str = "", status: str = "", priority: str = "") -> str:
+    """Update a request's fields.
+
+    Args:
+        request_id: The request ID.
+        name: New name (leave empty to keep current).
+        description: New description (leave empty to keep current).
+        status: New status: open, pending, closed (leave empty to keep current).
+        priority: New priority: low, normal, high, urgent (leave empty to keep current).
+    """
+    data = {}
+    if name:
+        data["name"] = name
+    if description:
+        data["description"] = description
+    if status:
+        data["status"] = status
+    if priority:
+        data["priority"] = priority
+    if not data:
+        return "Nothing to update — provide at least one field."
+    result = _patch(f"/requests/{request_id}", data)
+    return f"Request #{result['id']} updated: {result['name']} ({result['status']}, {result.get('priority', 'normal')})"
+
+
+@mcp.tool()
+def link_item(request_id: int, channel: str, item_id: str, label: str = "") -> str:
+    """Link a channel item to a request.
+
+    Args:
+        request_id: The request ID.
+        channel: Channel type: gmail, zendesk, gchat, sms.
+        item_id: The item's ID in its channel (e.g. ticket number, message ID).
+        label: Optional human-readable label for the item.
+    """
+    data = {"channel": channel, "item_id": item_id}
+    if label:
+        data["label"] = label
+    result = _post(f"/requests/{request_id}/items", data)
+    return f"Item linked: {channel} {item_id} → request #{request_id}"
+
+
+@mcp.tool()
+def unlink_item(request_id: int, item_id: int) -> str:
+    """Remove a linked item from a request.
+
+    Args:
+        request_id: The request ID.
+        item_id: The linked item's ID (from get_request output, not the channel item ID).
+    """
+    result = _delete(f"/requests/{request_id}/items/{item_id}")
+    return f"Item #{item_id} unlinked from request #{request_id}."
 
 
 if __name__ == "__main__":
